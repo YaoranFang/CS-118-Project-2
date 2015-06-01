@@ -11,6 +11,14 @@
 #include <fstream>
 #include <stdio.h>
 #include <stdlib.h>
+#include <limits.h>
+#include <string>
+
+using namespace std;
+
+
+#define BUFLEN 2048
+#define NUM_ROUTERS 6
 
 
 struct RoutingTableEntry {
@@ -18,9 +26,7 @@ struct RoutingTableEntry {
 	int destPort;
 	int cost;
 	int nextPort;
-} routingtable [6][6];
-
-#define BUFLEN 2048;
+} entry;
 
 
 /*******************************************************
@@ -28,10 +34,7 @@ struct RoutingTableEntry {
 *******************************************************/
 
 //initialize Routing table
-void initialTable(){
-
-}
-
+int routing_tables[NUM_ROUTERS][NUM_ROUTERS] = {INT_MAX};
 
 //read the initial file and update the routing table accordingly
 //specified in "Approach 8."
@@ -43,7 +46,7 @@ void readInitialFile(){
 //print the content of the ith table.
 //specified in "Instruction 5." of the project specification
 void printTable (int i){// i is the ith table
-
+	
 }
 
 
@@ -58,10 +61,11 @@ void saveTable (int i){// i is the ith table
 void broadcast (int myPort, int remPort){//myPort is the source port, remPort is the destination port
 
 	struct sockaddr_in myaddr, remaddr;
-	int fd, i, slen=sizeof(remaddr);
+	int fd, i;
+	int slen=sizeof(remaddr);
 	char buf[BUFLEN];	/* message buffer */
 	int recvlen;		/* # bytes in acknowledgement message */
-	char *server = "127.0.0.1";	/* localhost */
+	string server = "127.0.0.1";	/* localhost */
 
 	/* create a socket */
 
@@ -77,17 +81,17 @@ void broadcast (int myPort, int remPort){//myPort is the source port, remPort is
 
 	if (bind(fd, (struct sockaddr *)&myaddr, sizeof(myaddr)) < 0) {
 		perror("bind failed");
-		return 0;
+		return;
 	}
 
 	/* now define remaddr, the address to whom we want to send messages */
 	memset((char *) &remaddr, 0, sizeof(remaddr));
 	remaddr.sin_family = AF_INET;
 	remaddr.sin_port = htons(remPort);
-	if (inet_aton(server, &remaddr.sin_addr)==0) {
+	/*if (inet_aton(server, &remaddr.sin_addr)==0) {
 		fprintf(stderr, "inet_aton() failed\n");
 		exit(1);
-	}
+	}*/
 
 	//TODO
 	/*begin sending message*/
@@ -103,9 +107,10 @@ void receiveDVAndUpdateTable (int i){//i is the ith table
 /*******************************************************
 						Main
 *******************************************************/
-int int main(int argc, char const *argv[])
+int main(int argc, char const *argv[])
 {	
-	if (argc != 2 ) {
+
+  if (argc != 2 ) {
     printf("Please enter a character form A to G.\n");;
     exit(0);
   }
@@ -142,15 +147,6 @@ int int main(int argc, char const *argv[])
   	
   }
 
+
 	return 0;
 }
-
-
-
-
-
-
-
-
-
-
