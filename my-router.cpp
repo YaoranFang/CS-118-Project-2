@@ -283,7 +283,7 @@ void receiveDVAndUpdateTable (int myPort){
 	//if received DV, update table
 	if (toReceive.type){
 		//update destination port number
-		int dest_index = toReceive.destId - 'A';
+		//int dest_index = toReceive.destId - 'A'; //this should be set when the package is a data
 		int package_source_index = ntohs(remaddr) - 10000;
 		//routing_table.table[dest_index].port = toReceive.destPort; //this should be set when the package is a data
 
@@ -291,9 +291,9 @@ void receiveDVAndUpdateTable (int myPort){
 		for(int i = 0; i < NUM_ROUTERS; i++){
 
 			if((routing_table.table[i].cost>toReceive.tableEntry[i]+routing_table.table[package_source_index].cost)
-				|| (routing_table.table[i].cost = toReceive.tableEntry[i]+routing_table.table[package_source_index].cost
+				|| (routing_table.table[i].cost == toReceive.tableEntry[i]+routing_table.table[package_source_index].cost
 				&& routing_table.table[i].nextPort > ntohs(remaddr))){
-				
+
 				routing_table.table[i].cost = toReceive.tableEntry[i]+routing_table.table[package_source_index].cost;
 				routing_table.table[i].port = i + 10000;
 				routing_table.table[i].nextPort = ntohs(remaddr);
@@ -307,9 +307,18 @@ void receiveDVAndUpdateTable (int myPort){
 
 	//if received data packet, ....
 	} else {
-		//handle data
+		int dest_index = toReceive.destId - 'A';
+		if(toReceive.destId == MY_ID){//data arrive at destination
+			printf("Package arrive. Traversed path: %s\n", path_travelled);
+		}else{//forward to data to next node
+			remaddr.sin_port = htons(routing_table.table[dest_index].nextPort);
+			if (sendto(fd, buf, strlen(buf), 0, (struct sockaddr *)&remaddr, slen)==-1) {
+				perror("sendto");
+				exit(1);
+			}
+		}
+		
 	}
-	
 }
 
 
