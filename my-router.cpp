@@ -59,7 +59,7 @@ struct packet {
 
 //This is set in the beginning in int main. This is the own ABCDEFGH ID.
 char MY_ID;
-
+packet string_to_packet(char* buf, int recvlen);
 /*******************************************************
 			Functions
 *******************************************************/
@@ -266,7 +266,7 @@ void receiveDVAndUpdateTable (int myPort, int i){
 	}
 
 	//Now convert the string back into a usable format
-	toReceive = string_to_packet(buf); 
+	toReceive = string_to_packet(buf, recvlen); 
 	//Notice that toReceive.path_travelled is already updated
 
 	//if received DV, update table
@@ -286,22 +286,22 @@ void receiveDVAndUpdateTable (int myPort, int i){
 
 
 //This function changes the string from buffer into a usable packet by 
-packet string_to_packet(char* buf)
+packet string_to_packet(char* buf, int recvlen)
 {
 	packet toGet;
 	char tempbuf[15] = "";
-	int fd, recvlen, count, k, j;
+	int fd,  count=0, k, j;
 
 	toGet.type = buf[0];
 	toGet.destId = buf[1];
 	for (k = 2; k < 7; k++)
 		tempbuf[k-2] = buf[k];
 	tempbuf[5] = '\0';			//just making sure it ends
-
+	
 	toGet.destPort = atoi(tempbuf);
 	tempbuf[0] = '\0';			//reset
 	j = 0;
-	for(k = 6; k < recvlen; k++){
+	for(k = 7; k < recvlen; k++){
 		if (count == 6) break;
   		//whenever there is a space, wrap up tempbuf,
 		//and store it into a tableEntry.
@@ -322,13 +322,14 @@ packet string_to_packet(char* buf)
 	for (k; k < recvlen; k++){
 		if (buf[k] == '\0') break;
 		toGet.path_travelled[j] = buf[k];
+		j++;
 	}
+	
 	//k is pointing at end, add current path.
-	toGet.path_travelled[k] = MY_ID;
-	toGet.path_travelled[k+1] = '\0';
-
+	toGet.path_travelled[j] = MY_ID;
+	toGet.path_travelled[j+1] = '\0';
 	return toGet;
-}
+	}
 
 
 /*******************************************************
