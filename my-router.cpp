@@ -38,7 +38,7 @@ struct RoutingTableEntry {
 struct RoutingTable {
 	int port;
 	RoutingTableEntry table[NUM_ROUTERS];
-} routing_tables[NUM_ROUTERS];
+} routing_table;
 
 /* index 0-A
  * index 1-B
@@ -49,73 +49,79 @@ struct RoutingTable {
  */
 
 struct packet {
-	char type; //control or data
-	char destId;  //needs to know where it wants to go
+	char type; 			//control 1 or data 0
+	char destId; 			//needs to know where it wants to go
 	int destPort;
-	int tableEntry[6];  //the actual payload
-	char path_travelled[PATHLENGTH]; //Path travelled for this packet, useful to determine when to stop, etc.
+	int tableEntry[6];	 	//the actual payload
+	char path_travelled[PATHLENGTH];//Path travelled for this packet,
+					//useful to determine when to stop, etc.
 } toSend, toReceive;
-char MY_ID; //This is set in the beginning in int main. This is the own ABCDEFGH ID.
+
+//This is set in the beginning in int main. This is the own ABCDEFGH ID.
+char MY_ID;
 
 /*******************************************************
-						Functions
+			Functions
 *******************************************************/
+
 
 packet string_to_packet(char* buf);
 
+
 //initialize routing tables
-void initializeTables(){
+void initializeTable(){
+	int index = MY_ID - 'A';
+	routing_table.port = 10000 + index;
 	for (int i = 0; i < NUM_ROUTERS; i++){
-		routing_tables[i].port = 10000 + i;
-		for (int j = 0; j < NUM_ROUTERS; j++){
-			if (i == j)
-				routing_tables[i].table[j].cost = 0;
-			else
-				routing_tables[i].table[j].cost = INT_MAX;
-		}
+		if (index == i)
+			routing_table.table[i].cost = 0;
+		else
+			routing_table.table[i].cost = INT_MAX;
 	}
 }
-
-
 
 
 //read the initial file and update the routing table accordingly
 //specified in "Approach 8."
 void readInitialFile(const char* filename){
-	initializeTables();
+	initializeTable();
 	std::string line;
 	std::ifstream file(filename);
 	if (file.is_open()){
+		//read file line by line
 		while(getline(file, line)){
+			//tokenize string with ',' delimiter
 			char* line_ptr = &line[0];
 			char* source_router = strtok(line_ptr, ",");
 			if (source_router == NULL){
 				file.close();
 				return;
 			}
-			char* dest_router = strtok(NULL, ",");
-			if (dest_router == NULL){
-				file.close();
-				return;
-			}
-			char* source_port = strtok(NULL, ",");
-			if (source_port == NULL){
-				file.close();
-				return;
-			}
-			char* link_cost = strtok(NULL, ",");
-			if (link_cost == NULL){
-				file.close();
-				return;
-			}
+			if (source_router[0] == MY_ID){
+				char* dest_router = strtok(NULL, ",");
+				if (dest_router == NULL){
+					file.close();
+					return;
+				}
+				char* source_port = strtok(NULL, ",");
+				if (source_port == NULL){
+					file.close();
+					return;
+				}
+				char* link_cost = strtok(NULL, ",");
+				if (link_cost == NULL){
+					file.close();
+					return;
+				}
 
-			int src_router = source_router[0] - 'A';
-			int dst_router = dest_router[0] - 'A';
-			int dst_port = atoi(source_port);
-			int cost = atoi(link_cost);
+				int dst_router = dest_router[0] - 'A';
+				int dst_port = atoi(source_port);
+				int cost = atoi(link_cost);
 
-			routing_tables[src_router].table[dst_router].cost = cost;
-			routing_tables[src_router].table[dst_router].port = dst_port;
+				//update routing_tables
+				routing_table.table[dst_router].cost = cost;
+				routing_table.table[dst_router].port = dst_port;
+			}
 		}
 		file.close();
 	}
@@ -124,17 +130,16 @@ void readInitialFile(const char* filename){
 
 //print the content of the ith table.
 //specified in "Instruction 5." of the project specification
-void printTable (int i){// i is the ith table
+void printTable (){
 	printf("Destination\tCost\tOutgoing UDP Port\tDestination UDP Port\n");
-	char my_id = 'A' + i;
-	for (int j = 0; j < NUM_ROUTERS; j++){
-		int cost = routing_tables[i].table[j].cost;
-		if (cost != INT_MAX && i != j){
-			char dest_id = 'A' + j;
-			int my_port = routing_tables[i].port;
-			int dest_port = routing_tables[i].table[j].port;
+	for (int i = 0; i < NUM_ROUTERS; i++){
+		int cost = routing_table.table[i].cost;
+		if (cost != INT_MAX && i != MY_ID - 'A'){
+			char dest_id = 'A' + i;
+			int my_port = routing_table.port;
+			int dest_port = routing_table.table[i].port;
 			printf("%c\t\t%d\t%d (Node %c)\t\t%d (Node %c)\n",
-			dest_id, cost, my_port, my_id, dest_port, dest_id);
+			dest_id, cost, my_port, MY_ID, dest_port, dest_id);
 		}
 	}
 	printf("\n\n");
@@ -143,36 +148,46 @@ void printTable (int i){// i is the ith table
 
 //save the Routing Table Entries into a file
 //specified in "Approach 7." of the project specification
-void saveTable (int i){// i is the ith table
+void saveTable (){
+	//build filename
 	std::string fname = "routing-output";
-	fname += ('A' + i);
+	fname += MY_ID;
 	fname += ".txt";
-
 	const char* filename = fname.c_str();
+
+	//open file and append updated table
 	freopen(filename, "a", stdout);
-	printTable(i);
+	printTable();
 	fclose(stdout);
 }
 
 
+//gets current DV for this router
+//make sure to pass in an array of size NUM_ROUTERS
+void getDV (int* DV){
+	for (int i = 0; i < NUM_ROUTERS; i++){
+		DV[i] = routing_table.table[i].cost;
+	}
+}
+
+
 //broadcast DV
-void broadcast (int myPort, int remPort){//myPort is the source port, remPort is the destination port
+//myPort is the source port, remPort is the destination port
+void broadcast (int myPort, int remPort){
 
 	struct sockaddr_in myaddr, remaddr;
 	int fd, i;
 	int slen=sizeof(remaddr);
-	char buf[BUFLEN] = "";	/* message buffer */
-	char tempbuf[10]="";
-	int recvlen;		/* # bytes in acknowledgement message */
-	std::string server = "127.0.0.1";	/* localhost */
+	char buf[BUFLEN] = "";			//message buffer
+	char tempbuf[10] = "";
+	int recvlen;				//# bytes in ack message
+	std::string server = "127.0.0.1";	//localhost
 
-	/* create a socket */
-
+	//create a socket
 	if ((fd=socket(AF_INET, SOCK_DGRAM, 0))==-1)
 		printf("socket created\n");
 
-	/* bind it to all local addresses */
-
+	//bind it to all local addresses
 	memset((char *)&myaddr, 0, sizeof(myaddr));
 	myaddr.sin_family = AF_INET;
 	myaddr.sin_addr.s_addr = htonl(INADDR_ANY);
@@ -183,7 +198,7 @@ void broadcast (int myPort, int remPort){//myPort is the source port, remPort is
 		return;
 	}
 
-	/* now define remaddr, the address to whom we want to send messages */
+	//now define remaddr, the address to whom we want to send messages
 	memset((char *) &remaddr, 0, sizeof(remaddr));
 	remaddr.sin_family = AF_INET;
 	remaddr.sin_port = htons(remPort);
@@ -203,50 +218,70 @@ void broadcast (int myPort, int remPort){//myPort is the source port, remPort is
 	strcat(buf, &toSend.destId);
         sprintf(tempbuf, "%d", toSend.destPort);
 	strcat(buf, tempbuf);
-	for (int i = 0; i<6; i++)    //all the table entries
-	{ 
+
+	//all the table entries
+	for (int i = 0; i < 6; i++){
           sprintf(tempbuf, "%d", toSend.tableEntry[i]);
 	  strcat(buf, tempbuf);
 	  strcat(buf, " ");
 	}
-	strcat(buf, toSend.path_travelled); //path_travelled is already a char*.
+
+	//path_travelled is already a char*.
+	strcat(buf, toSend.path_travelled);
 	
 	//Actually send (send the thing called "buf")
 	//find the places possible to send, and use sendTo to send
-
 }
 
+
 //Still needs myPort to open socket
-void receiveDVAndUpdateTable (int myPort, int i){//i is the ith table
+//i is the ith table
+void receiveDVAndUpdateTable (int myPort, int i){
+
 	struct sockaddr_in myaddr, remaddr;
 	unsigned int addrlen = sizeof(remaddr);
-	char buf[BUFLEN]="";
+	char buf[BUFLEN] = "";
 	
 	int fd, recvlen;
 
-	if ((fd=socket(AF_INET, SOCK_DGRAM, 0))==-1)
+	//create a socket
+	if ((fd=socket(AF_INET, SOCK_DGRAM, 0)) == -1)
 		printf("socket created\n");
 
-	
-	memset((char *)&myaddr, 0, sizeof(myaddr));
+	//bind it to all local addresses
+	memset((char *) &myaddr, 0, sizeof(myaddr));
 	myaddr.sin_family = AF_INET;
 	myaddr.sin_addr.s_addr = htonl(INADDR_ANY);
 	myaddr.sin_port = htons(myPort);
 
-	if (bind(fd, (struct sockaddr *)&myaddr, sizeof(myaddr)) < 0) {
+	if (bind(fd, (struct sockaddr *) &myaddr, sizeof(myaddr)) < 0) {
 		perror("bind failed");
 		return;
 	}
 
-	for(;;)  //keep receiving until something actually comes
-	{
-	recvlen = recvfrom(fd, buf, BUFLEN, 0, (struct sockaddr*)&remaddr, &addrlen);
-	if(recvlen>0) break;   
+	//keep listening until something actually comes
+	for (;;) {
+		recvlen = recvfrom(fd, buf, BUFLEN, 0, (struct sockaddr*) &remaddr, &addrlen);
+		if (recvlen > 0) break;   
 	}
-	//Now convert the string back into a usable format
-	toReceive = string_to_packet(buf); //Notice that toReceive.path_travelled is already updated
 
-	//do stuff with it
+	//Now convert the string back into a usable format
+	toReceive = string_to_packet(buf); 
+	//Notice that toReceive.path_travelled is already updated
+
+	//if received DV, update table
+	if (toReceive.type){
+		//update destination port number
+		int dest_index = toReceive.destId - 'A';
+		routing_table.table[dest_index].port = toReceive.destPort;
+		//update costs
+
+
+	//if received data packet, ....
+	} else {
+		//handle data
+	}
+	
 }
 
 
@@ -254,41 +289,39 @@ void receiveDVAndUpdateTable (int myPort, int i){//i is the ith table
 packet string_to_packet(char* buf)
 {
 	packet toGet;
-	char tempbuf[15]="";
+	char tempbuf[15] = "";
 	int fd, recvlen, count, k, j;
 
 	toGet.type = buf[0];
 	toGet.destId = buf[1];
-	for(k = 2; k<7; k++)
-		tempbuf[k-2]=buf[k];
-	tempbuf[5]='\0'; //just making sure it ends
+	for (k = 2; k < 7; k++)
+		tempbuf[k-2] = buf[k];
+	tempbuf[5] = '\0';			//just making sure it ends
 
 	toGet.destPort = atoi(tempbuf);
-	tempbuf[0]='\0';//reset
-	j=0;
-	for(k = 6; k<recvlen; k++)
-	{
-		if(count==6) break;
-		if(buf[k]==' ') {  //whenever there is a space, wrap up tempbuf, and store it into a tableEntry.
-			tempbuf[j]='\0';
-			toGet.tableEntry[count]=atoi(tempbuf);
-			tempbuf[0]='\0';
-			j=0;
+	tempbuf[0] = '\0';			//reset
+	j = 0;
+	for(k = 6; k < recvlen; k++){
+		if (count == 6) break;
+  		//whenever there is a space, wrap up tempbuf,
+		//and store it into a tableEntry.
+		if (buf[k] == ' ') {
+			tempbuf[j] = '\0';
+			toGet.tableEntry[count] = atoi(tempbuf);
+			tempbuf[0] = '\0';
+			j = 0;
 			count++; 
 			continue; 
-		}
-		else
-		{
-			tempbuf[j]=buf[k];
+		} else {
+			tempbuf[j] = buf[k];
 			j++;
 		}
 	}
 	//k is not reset and is still pointing at beginning of strings.
-	j=0;
-	for (k; k<recvlen; k++)
-	{
-		if(buf[k]=='\0') break;
-		toGet.path_travelled[j]=buf[k];
+	j = 0;
+	for (k; k < recvlen; k++){
+		if (buf[k] == '\0') break;
+		toGet.path_travelled[j] = buf[k];
 	}
 	//k is pointing at end, add current path.
 	toGet.path_travelled[k] = MY_ID;
@@ -303,58 +336,24 @@ packet string_to_packet(char* buf)
 *******************************************************/
 int main(int argc, char const *argv[])
 {	
-  readInitialFile("../sample");
-  printTable(0);
-  printTable(1);
-  printTable(2);
-  printTable(3);
-  printTable(4);
-  printTable(5);
 
-/*
   if (argc != 2 ) {
     printf("Please enter a character form A to G.\n");;
     exit(0);
   }
   
-  	
-
-  if(argv[1]=="A"){
-  	MY_ID = 'A';
-
+  MY_ID = argv[1][0];
+  if (MY_ID < 'A' || 'G' < MY_ID){
+    printf("Please enter a character from A to G\n");
+    exit(0);
   }
 
-   if(argv[1]=="B"){
-	   MY_ID = 'B';
-  	
-  }
+  readInitialFile("initialization_file.txt");
+  printTable();
 
-   if(argv[1]=="C"){
-	   MY_ID = 'C';
-  	
-  }
+  int DV[NUM_ROUTERS];
+  getDV(DV);
+  printf("DV: %d, %d, %d, %d, %d, %d\n\n", DV[0], DV[1], DV[2], DV[3], DV[4], DV[5]);
 
-   if(argv[1]=="D"){
-	   MY_ID = 'D';
-
-  }
-
-   if(argv[1]=="E"){
-	   MY_ID = 'E';
-
-  }
-
-  if(argv[1]=="F"){
-	  MY_ID = 'F';
-
-  	
-  }
-
-  if(argv[1]=="G"){
-	  MY_ID = 'G';
-
-  	
-  }
-*/
-	return 0;
+  return 0;
 }
