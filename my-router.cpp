@@ -33,6 +33,7 @@
 struct RoutingTableEntry {
 	int port;
 	int cost;
+	int nextPort; //Should know where should I forward the packet to
 };
 
 struct RoutingTable {
@@ -73,10 +74,15 @@ void initializeTable(){
 	int index = MY_ID - 'A';
 	routing_table.port = 10000 + index;
 	for (int i = 0; i < NUM_ROUTERS; i++){
-		if (index == i)
+		if (index == i){
 			routing_table.table[i].cost = 0;
-		else
+			routing_table.table[i].nextPort = routing_table.port;
+		}
+
+		else{
 			routing_table.table[i].cost = INT_MAX;
+			routing_table.table[i].nextPort = -1;
+		}
 	}
 }
 
@@ -121,6 +127,7 @@ void readInitialFile(const char* filename){
 				//update routing_tables
 				routing_table.table[dst_router].cost = cost;
 				routing_table.table[dst_router].port = dst_port;
+				routing_table.table[dst_router].nextPort = dst_port;
 			}
 		}
 		file.close();
@@ -231,12 +238,16 @@ void broadcast (int myPort, int remPort){
 	
 	//Actually send (send the thing called "buf")
 	//find the places possible to send, and use sendTo to send
+	if (sendto(fd, buf, strlen(buf), 0, (struct sockaddr *)&remaddr, slen)==-1) {
+		perror("sendto");
+		exit(1);
+	}
 }
 
 
 //Still needs myPort to open socket
 //i is the ith table
-void receiveDVAndUpdateTable (int myPort, int i){
+void receiveDVAndUpdateTable (int myPort){
 
 	struct sockaddr_in myaddr, remaddr;
 	unsigned int addrlen = sizeof(remaddr);
@@ -273,9 +284,26 @@ void receiveDVAndUpdateTable (int myPort, int i){
 	if (toReceive.type){
 		//update destination port number
 		int dest_index = toReceive.destId - 'A';
-		routing_table.table[dest_index].port = toReceive.destPort;
-		//update costs
+		int package_source_index = ntohs(remaddr) - 10000;
+		//routing_table.table[dest_index].port = toReceive.destPort; //this should be set when the package is a data
 
+		//update costs
+		for(int i = 0; i < NUM_ROUTERS; i++){
+
+			if((routing_table.table[i].cost>toReceive.tableEntry[i]+routing_table.table[package_source_index].cost)
+				|| (routing_table.table[i].cost = toReceive.tableEntry[i]+routing_table.table[package_source_index].cost
+				&& routing_table.table[i].nextPort > ntohs(remaddr))){
+				
+				routing_table.table[i].cost = toReceive.tableEntry[i]+routing_table.table[package_source_index].cost;
+				routing_table.table[i].port = i + 10000;
+				routing_table.table[i].nextPort = ntohs(remaddr);
+
+				saveTable ();
+				printTable ()
+			}
+
+
+		}
 
 	//if received data packet, ....
 	} else {
