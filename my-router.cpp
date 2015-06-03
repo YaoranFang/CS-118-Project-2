@@ -1,4 +1,3 @@
-//#define _CRT_SECURE_NO_DEPRECATE
 #include <iostream>
 #include <string.h>
 //#include <sys/wait.h>
@@ -12,7 +11,6 @@
 
 #include <sys/socket.h>  //Unix Version
 //#include <WinSock2.h>  //Windows version
-//#pragma comment(lib, "ws2_32.lib")
 
 //#include <netinet/in.h>
 #include <ctime>
@@ -95,8 +93,6 @@ void initializeTable(){
 //read the initial file and update the routing table accordingly
 //specified in "Approach 8."
 void readInitialFile(const char* filename){
-	int i = 1;
-	char tempbuf[15];
 	initializeTable();
 	std::string line;
 	std::ifstream file(filename);
@@ -105,23 +101,23 @@ void readInitialFile(const char* filename){
 		while(getline(file, line)){
 			//tokenize string with ',' delimiter
 			char* line_ptr = &line[0];
-			char* source_router = strtok_s(line_ptr, ",", (char**)&tempbuf);
+			char* source_router = strtok(line_ptr, ",");
 			if (source_router == NULL){
 				file.close();
 				return;
 			}
 			if (source_router[0] == MY_ID){
-				char* dest_router = strtok_s(NULL, ",", (char**)&tempbuf);
+				char* dest_router = strtok(NULL, ",");
 				if (dest_router == NULL){
 					file.close();
 					return;
 				}
-				char* source_port = strtok_s(NULL, ",", (char**)&tempbuf);
+				char* source_port = strtok(NULL, ",");
 				if (source_port == NULL){
 					file.close();
 					return;
 				}
-				char* link_cost = strtok_s(NULL, ",", (char**)&tempbuf);
+				char* link_cost = strtok(NULL, ",");
 				if (link_cost == NULL){
 					file.close();
 					return;
@@ -269,7 +265,7 @@ void receiveDVAndUpdateTable (int myPort){
 	struct sockaddr_in myaddr, remaddr;
 	unsigned int addrlen = sizeof(remaddr);
 	char buf[BUFLEN] = "";
-
+	
 	int fd, recvlen;
 
 	//create a socket
@@ -289,7 +285,7 @@ void receiveDVAndUpdateTable (int myPort){
 
 	//keep listening until something actually comes
 	for (;;) {
-		recvlen = recvfrom(fd, buf, BUFLEN, 0, (struct sockaddr*) &remaddr, (int*)&addrlen);
+		recvlen = recvfrom(fd, buf, BUFLEN, 0, (struct sockaddr*) &remaddr, &addrlen);
 		if (recvlen > 0) break;   
 	}
 
@@ -314,7 +310,11 @@ void receiveDVAndUpdateTable (int myPort){
 			    || (current_cost == pkg_cost
 				&& routing_table.table[i].nextPort > ntohs(remaddr.sin_port))){
 <<<<<<< HEAD
+<<<<<<< HEAD
 			
+=======
+
+>>>>>>> parent of ccf42c3... small changes just for OS compatibility
 				routing_table.table[i].cost = toReceive.tableEntry[i]+routing_table.table[package_source_index].cost;
 				routing_table.table[i].port = i + 10000;
 =======
@@ -328,7 +328,7 @@ void receiveDVAndUpdateTable (int myPort){
 				printTable ();
 			}
 		}
-		
+
 	//if received data packet, ....
 	} else {
 		int dest_index = toReceive.destId - 'A';
