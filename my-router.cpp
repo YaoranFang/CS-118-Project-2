@@ -147,7 +147,12 @@ void readInitialFile(const char* filename){
 //print the content of the ith table.
 //specified in "Instruction 5." of the project specification
 void printTable (){
-	printf("Destination\tCost\tOutgoing UDP Port\tDestination UDP Port\n");
+	printf("Destination\tCost\tOutgoing UDP Port\tDestination UDP Port\tTime\n");
+
+	time_t timer;
+	struct tm* timeinfo;
+	
+
 	for (int i = 0; i < NUM_ROUTERS; i++){
 		int cost = table[i].cost;
 		if (cost != INT_MAX && i != MY_ID - 'A'){
@@ -155,8 +160,12 @@ void printTable (){
 			int my_port = MY_ID - 'A' + 10000;
 			int next_port = table[i].nextPort;
 			char next_id = next_port - 10000 + 'A';
-			printf("%c\t\t%d\t%d (Node %c)\t\t%d (Node %c)\n",
-			dest_id, cost, my_port, MY_ID, next_port, next_id);
+
+			time(&timer);
+			timeinfo = localtime(&timer);
+
+			printf("%c\t\t%d\t%d (Node %c)\t\t%d (Node %c)\t%s\n",
+			dest_id, cost, my_port, MY_ID, next_port, next_id, asctime(timeinfo));
 		}
 	}
 	printf("\n\n");
