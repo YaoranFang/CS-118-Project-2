@@ -388,7 +388,7 @@ int main(int argc, char const *argv[])
 
   //second arg is destination router
   if (argc == 3){
-	DEST_ID = argv[1][1];
+	DEST_ID = argv[2][0];
 	if (MY_ID < 'A' || 'G' < MY_ID){
 		printf("Please enter a destination character from A to G\n");
 		exit(0);
@@ -397,7 +397,6 @@ int main(int argc, char const *argv[])
   	//give DEST_ID an impossible value if only one arg.
   	DEST_ID = 'Z';
   }
-
 
 
   readInitialFile("initialization_file.txt");
