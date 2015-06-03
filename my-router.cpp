@@ -60,6 +60,7 @@ struct packet {
 
 //This is set in the beginning in int main. This is the own ABCDEFGH ID.
 char MY_ID;
+char DEST_ID;
 packet string_to_packet(char* buf, int recvlen);
 /*******************************************************
 			Functions
@@ -284,7 +285,7 @@ void receiveDVAndUpdateTable (int myPort){
 	if (toReceive.type){
 		//update destination port number
 		//int dest_index = toReceive.destId - 'A'; //this should be set when the package is a data
-		int package_source_index = ntohs(remaddr) - 10000;
+		int package_source_index = ntohs(remaddr.sin_port) - 10000;
 		//routing_table.table[dest_index].port = toReceive.destPort; //this should be set when the package is a data
 
 		//update costs
@@ -292,27 +293,25 @@ void receiveDVAndUpdateTable (int myPort){
 
 			if((routing_table.table[i].cost>toReceive.tableEntry[i]+routing_table.table[package_source_index].cost)
 				|| (routing_table.table[i].cost == toReceive.tableEntry[i]+routing_table.table[package_source_index].cost
-				&& routing_table.table[i].nextPort > ntohs(remaddr))){
+				&& routing_table.table[i].nextPort > ntohs(remaddr.sin_port))){
 
 				routing_table.table[i].cost = toReceive.tableEntry[i]+routing_table.table[package_source_index].cost;
 				routing_table.table[i].port = i + 10000;
-				routing_table.table[i].nextPort = ntohs(remaddr);
+				routing_table.table[i].nextPort = ntohs(remaddr.sin_port);
 
 				saveTable ();
-				printTable ()
+				printTable ();
 			}
-
-
 		}
 
 	//if received data packet, ....
 	} else {
 		int dest_index = toReceive.destId - 'A';
 		if(toReceive.destId == MY_ID){//data arrive at destination
-			printf("Package arrive. Traversed path: %s\n", path_travelled);
+			printf("Package arrive. Traversed path: %s\n", toReceive.path_travelled);
 		}else{//forward to data to next node
 			remaddr.sin_port = htons(routing_table.table[dest_index].nextPort);
-			if (sendto(fd, buf, strlen(buf), 0, (struct sockaddr *)&remaddr, slen)==-1) {
+			if (sendto(fd, buf, strlen(buf), 0, (struct sockaddr *)&remaddr, sizeof(remaddr))==-1) {
 				perror("sendto");
 				exit(1);
 			}
@@ -374,24 +373,35 @@ packet string_to_packet(char* buf, int recvlen)
 *******************************************************/
 int main(int argc, char const *argv[])
 {	
-
-  if (argc != 2 ) {
+  //accept 1 or 2 arguments
+  if (argc != 2 && argc != 3 ) {
     printf("Please enter a character form A to G.\n");;
     exit(0);
   }
   
+  //first arg is this router ID
   MY_ID = argv[1][0];
   if (MY_ID < 'A' || 'G' < MY_ID){
     printf("Please enter a character from A to G\n");
     exit(0);
   }
 
+  //second arg is destination router
+  if (argc == 3){
+	DEST_ID = argv[1][1];
+	if (MY_ID < 'A' || 'G' < MY_ID){
+		printf("Please enter a destination character from A to G\n");
+		exit(0);
+	}
+  } else {
+  	//give DEST_ID an impossible value if only one arg.
+  	DEST_ID = 'Z';
+  }
+
+
+
   readInitialFile("initialization_file.txt");
   printTable();
-
-  int DV[NUM_ROUTERS];
-  getDV(DV);
-  printf("DV: %d, %d, %d, %d, %d, %d\n\n", DV[0], DV[1], DV[2], DV[3], DV[4], DV[5]);
 
   return 0;
 }
