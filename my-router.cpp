@@ -414,16 +414,16 @@ int main(int argc, char const *argv[])
   
   //first arg is this router ID
   MY_ID = argv[1][0];
-  if (MY_ID < 'A' || 'G' < MY_ID){
-    printf("Please enter a character from A to G\n");
+  if (MY_ID < 'A' || 'F' < MY_ID){
+    printf("Please enter a character from A to F\n");
     exit(0);
   }
 
   //second arg is destination router
   if (argc == 3){
 	DEST_ID = argv[2][0];
-	if (MY_ID < 'A' || 'G' < MY_ID){
-		printf("Please enter a destination character from A to G\n");
+	if (MY_ID < 'A' || 'F' < MY_ID){
+		printf("Please enter a destination character from A to F\n");
 		exit(0);
 	}
   } else {
