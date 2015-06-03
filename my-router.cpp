@@ -24,7 +24,7 @@
 #include <limits.h>
 #include <string>
 #include <cstdlib>
-//#include <arpa/inet.h>
+#include <arpa/inet.h>
 #include <vector>
 
 
@@ -148,27 +148,28 @@ void readInitialFile(const char* filename){
 //specified in "Instruction 5." of the project specification
 void printTable (){
 	printf("Destination\tCost\tOutgoing UDP Port\tDestination UDP Port\tTime\n");
+std::cout << "here";
 
-	time_t timer;
-	struct tm* timeinfo;
+	//time_t timer;
+	//struct tm* timeinfo;
 	
 
-	for (int i = 0; i < NUM_ROUTERS; i++){
-		int cost = table[i].cost;
-		if (cost != INT_MAX && i != MY_ID - 'A'){
-			char dest_id = 'A' + i;
+	//for (int i = 0; i < NUM_ROUTERS; i++){
+	//	int cost = table[i].cost;
+	//	if (cost != INT_MAX && i != int(MY_ID - 'A')){
+			/*char dest_id = 'A' + i;
 			int my_port = MY_ID - 'A' + 10000;
 			int next_port = table[i].nextPort;
 			char next_id = next_port - 10000 + 'A';
 
 			time(&timer);
-			timeinfo = localtime(&timer);
+			timeinfo = localtime(&timer);*/
 
-			printf("%c\t\t%d\t%d (Node %c)\t\t%d (Node %c)\t%s\n",
-			dest_id, cost, my_port, MY_ID, next_port, next_id, asctime(timeinfo));
-		}
-	}
-	printf("\n\n");
+			printf("entered");
+			//printf("%c\t\t%d\t%d (Node %c)\t\t%d (Node %c)\t\t%s\n", dest_id, cost, my_port, MY_ID, next_port, next_id, asctime(timeinfo));
+	//	}
+	printf("_");
+	//}
 }
 
 
@@ -228,10 +229,11 @@ void broadcast (int myPort, int remPort){
 	memset((char *) &remaddr, 0, sizeof(remaddr));
 	remaddr.sin_family = AF_INET;
 	remaddr.sin_port = htons(remPort);
-	/*if (inet_aton(server, &remaddr.sin_addr)==0) {
+	const char* server_cc = server.c_str();
+	if (inet_aton(server_cc, &remaddr.sin_addr)==0) {
 		fprintf(stderr, "inet_aton() failed\n");
 		exit(1);
-	}*/
+	}
 
 	//TODO
 	/*begin sending message*/
@@ -271,13 +273,17 @@ void broadcast (int myPort, int remPort){
 		perror("sendto");
 		exit(1);
 	}
+
+	close(fd);
+
 }
 
 
 void broadcast_all (){
 	for (std::vector<int>::iterator it = NEIGHBORS.begin();
-		it != NEIGHBORS.end(); it++)
+		it != NEIGHBORS.end(); it++){
 			broadcast(int(MY_ID - 'A' + 10000), *it);
+	}
 }
 
 
@@ -306,6 +312,7 @@ void receiveDVAndUpdateTable (int myPort){
 		return;
 	}
 
+	printf("trying to receive");
 	//keep listening until something actually comes
 	for (;;) {
 		recvlen = recvfrom(fd, buf, BUFLEN, 0, (struct sockaddr*) &remaddr, (socklen_t*)&addrlen);
@@ -316,6 +323,7 @@ void receiveDVAndUpdateTable (int myPort){
 	toReceive = string_to_packet(buf, recvlen); 
 	//Notice that toReceive.path_travelled is already updated
 
+	printf("trying to update");
 	//if received DV, update table
 	if (toReceive.type){
 		//get package source router
@@ -358,6 +366,7 @@ void receiveDVAndUpdateTable (int myPort){
 		}
 		
 	}
+	close(fd);
 }
 
 
@@ -443,13 +452,14 @@ int main(int argc, char const *argv[])
   	DEST_ID = 'Z';
   	readInitialFile("initialization_file.txt");
   	printTable();
-  	for(;;){
-  		readInitialFile("initialization_file.txt");//if the initialization_file is changed, the Node can update itself without restartting the program)
+	//saveTable();
+/*  	while(true){
+		printf("broadcast");
   		broadcast_all (); 
   		receiveDVAndUpdateTable (int(MY_ID - 'A' + 10000));
   		usleep(5000000);
   	}
-  	
+  */	
   }
 
   return 0;
