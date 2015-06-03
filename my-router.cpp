@@ -34,7 +34,6 @@
 
 
 struct RoutingTableEntry {
-	int port;
 	int cost;
 	int nextPort; //Should know where should I forward the packet to
 };
@@ -133,7 +132,6 @@ void readInitialFile(const char* filename){
 
 				//update routing_tables
 				table[dst_router].cost = cost;
-				table[dst_router].port = dst_port;
 				table[dst_router].nextPort = dst_port;
 
 				NEIGHBORS.push_back(dst_router + 10000);
@@ -148,28 +146,25 @@ void readInitialFile(const char* filename){
 //specified in "Instruction 5." of the project specification
 void printTable (){
 	printf("Destination\tCost\tOutgoing UDP Port\tDestination UDP Port\tTime\n");
-std::cout << "here";
 
-	//time_t timer;
-	//struct tm* timeinfo;
+	time_t timer;
+	struct tm* timeinfo;
 	
 
-	//for (int i = 0; i < NUM_ROUTERS; i++){
-	//	int cost = table[i].cost;
-	//	if (cost != INT_MAX && i != int(MY_ID - 'A')){
-			/*char dest_id = 'A' + i;
+	for (int i = 0; i < NUM_ROUTERS; i++){
+		int cost = table[i].cost;
+		if (cost != INT_MAX && i != int(MY_ID - 'A')){
+			char dest_id = 'A' + i;
 			int my_port = MY_ID - 'A' + 10000;
 			int next_port = table[i].nextPort;
 			char next_id = next_port - 10000 + 'A';
 
 			time(&timer);
-			timeinfo = localtime(&timer);*/
+			timeinfo = localtime(&timer);
 
-			printf("entered");
-			//printf("%c\t\t%d\t%d (Node %c)\t\t%d (Node %c)\t\t%s\n", dest_id, cost, my_port, MY_ID, next_port, next_id, asctime(timeinfo));
-	//	}
-	printf("_");
-	//}
+			printf("%c\t\t%d\t%d (Node %c)\t\t%d (Node %c)\t\t%s\n", dest_id, cost, my_port, MY_ID, next_port, next_id, asctime(timeinfo));
+		}
+	}
 }
 
 
@@ -181,11 +176,12 @@ void saveTable (){
 	fname += MY_ID;
 	fname += ".txt";
 	const char* filename = fname.c_str();
+	FILE *fp;
 
 	//open file and append updated table
-	freopen(filename, "a", stdout);
+	fp = freopen(filename, "a", stdout);
 	printTable();
-	fclose(stdout);
+	fclose(fp);
 }
 
 
@@ -238,7 +234,7 @@ void broadcast (int myPort, int remPort){
 	//TODO
 	/*begin sending message*/
 	//Throw in data for packet
-		if(MY_ID>='A'&&MY_ID<='F'){
+		if(DEST_ID == 'Z'){
 			toSend.type = '1';
 			getDV(toSend.tableEntry);
 		}else{
@@ -293,6 +289,7 @@ void receiveDVAndUpdateTable (int myPort){
 
 	struct sockaddr_in myaddr, remaddr;
 	unsigned int addrlen = sizeof(remaddr);
+//	char *buf2 = ;
 	char buf[BUFLEN] = "";
 
 	int fd, recvlen;
@@ -312,20 +309,28 @@ void receiveDVAndUpdateTable (int myPort){
 		return;
 	}
 
-	printf("trying to receive");
+
+	//printf("trying to receive");
 	//keep listening until something actually comes
-	for (;;) {
+//	for (;;) {
+		struct timeval tv;
+		tv.tv_sec = 0;
+		tv.tv_usec = 100000;
+		if (setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) < 0){
+			return;
+		}
 		recvlen = recvfrom(fd, buf, BUFLEN, 0, (struct sockaddr*) &remaddr, (socklen_t*)&addrlen);
-		if (recvlen > 0) break;   
-	}
+	//	if (recvlen > 0) break;   
+		if (recvlen < 1){ close(fd); return;}
+//	}
 
 	//Now convert the string back into a usable format
 	toReceive = string_to_packet(buf, recvlen); 
 	//Notice that toReceive.path_travelled is already updated
 
-	printf("trying to update");
 	//if received DV, update table
-	if (toReceive.type){
+
+	if (toReceive.type == '1'){
 		//get package source router
 		int package_source_index = ntohs(remaddr.sin_port) - 10000;
 
@@ -335,20 +340,25 @@ void receiveDVAndUpdateTable (int myPort){
 			int current_cost = table[i].cost;
 			int cost_from_pkg = toReceive.tableEntry[i];
 			int cost_to_pkg = table[package_source_index].cost;
-			int pkg_cost = cost_from_pkg + cost_to_pkg;
+			int pkg_cost;
+
+			if (cost_from_pkg == INT_MAX || cost_to_pkg == INT_MAX)
+				pkg_cost = INT_MAX;
+			else
+				pkg_cost = cost_from_pkg + cost_to_pkg;
 
 			if ((current_cost > pkg_cost)
 			    || (current_cost == pkg_cost
 				&& table[i].nextPort > ntohs(remaddr.sin_port))){
 			
-				table[i].cost = toReceive.tableEntry[i]+table[package_source_index].cost;
-				table[i].port = i + 10000;
+				table[i].cost = pkg_cost;
 				table[i].nextPort = ntohs(remaddr.sin_port);
 
-				saveTable ();
 				printTable ();
+				saveTable ();
 			}
 		}
+		printf("UPDATED");
 		
 	//if received data packet, ....
 	} else {
@@ -366,7 +376,9 @@ void receiveDVAndUpdateTable (int myPort){
 		}
 		
 	}
+	
 	close(fd);
+
 }
 
 
@@ -453,13 +465,12 @@ int main(int argc, char const *argv[])
   	readInitialFile("initialization_file.txt");
   	printTable();
 	//saveTable();
-/*  	while(true){
-		printf("broadcast");
+  	while(true){
   		broadcast_all (); 
   		receiveDVAndUpdateTable (int(MY_ID - 'A' + 10000));
-  		usleep(5000000);
+  		usleep(2000);
   	}
-  */	
+  	
   }
 
   return 0;
