@@ -14,7 +14,7 @@
 //#include <WinSock2.h>  //Windows version
 //#pragma comment(lib, "ws2_32.lib")
 
-//#include <netinet/in.h>
+#include <netinet/in.h>
 #include <ctime>
 #include <time.h>
 #include <fstream>
@@ -24,7 +24,7 @@
 #include <limits.h>
 #include <string>
 #include <cstdlib>
-#include <arpa/inet.h>
+//#include <arpa/inet.h>
 #include <vector>
 
 
@@ -300,28 +300,22 @@ void receiveDVAndUpdateTable (int myPort){
 	//if received DV, update table
 	if (toReceive.type){
 		//get package source router
-		int pkg_src_i = ntohs(remaddr.sin_port) - 10000;
+		int package_source_index = ntohs(remaddr.sin_port) - 10000;
 
 		//update costs
 		for(int i = 0; i < NUM_ROUTERS; i++){
 
 			int current_cost = routing_table.table[i].cost;
 			int cost_from_pkg = toReceive.tableEntry[i];
-			int cost_to_pkg = routing_table.table[pkg_src_i].cost;
+			int cost_to_pkg = routing_table.table[package_source_index].cost;
 			int pkg_cost = cost_from_pkg + cost_to_pkg;
 
 			if ((current_cost > pkg_cost)
 			    || (current_cost == pkg_cost
 				&& routing_table.table[i].nextPort > ntohs(remaddr.sin_port))){
-<<<<<<< HEAD
 			
 				routing_table.table[i].cost = toReceive.tableEntry[i]+routing_table.table[package_source_index].cost;
 				routing_table.table[i].port = i + 10000;
-=======
-
-				routing_table.table[i].cost = pkg_cost;
-				//routing_table.table[i].port = i + 10000;
->>>>>>> origin/master
 				routing_table.table[i].nextPort = ntohs(remaddr.sin_port);
 
 				saveTable ();
