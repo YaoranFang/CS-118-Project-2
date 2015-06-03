@@ -252,7 +252,7 @@ void broadcast (int myPort, int remPort){
 	//The String will take the format: "%c%c%d5%d %d %d %d %d %d %c%c%c%c%c%c%c%c", type, destId, destPort, tableEntry[0]...[5], path_travelled[0]...[7]
 	strcpy(buf, &toSend.type);
 	strcat(buf, &toSend.destId);
-        sprintf(tempbuf, "%d", toSend.destPort);
+    sprintf(tempbuf, "%d", toSend.destPort);
 	strcat(buf, tempbuf);
 
 	//all the table entries
@@ -429,18 +429,27 @@ int main(int argc, char const *argv[])
   //second arg is destination router
   if (argc == 3){
 	DEST_ID = argv[2][0];
+
 	if (MY_ID < 'A' || 'F' < MY_ID){
 		printf("Please enter a destination character from A to F\n");
 		exit(0);
 	}
+
+	broadcast (10006, int(MY_ID - 'A' + 10000),);
+
+	return 0;
   } else {
   	//give DEST_ID an impossible value if only one arg.
   	DEST_ID = 'Z';
+  	readInitialFile("initialization_file.txt");
+  	printTable();
+  	for(;;){
+  		readInitialFile("initialization_file.txt");//if the initialization_file is changed, the Node can update itself without restartting the program)
+  		broadcast_all (); 
+  		receiveDVAndUpdateTable (int(MY_ID - 'A' + 10000));
+  	}
+  	
   }
-
-
-  readInitialFile("initialization_file.txt");
-  printTable();
 
   return 0;
 }
