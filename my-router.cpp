@@ -176,12 +176,41 @@ void saveTable (){
 	fname += MY_ID;
 	fname += ".txt";
 	const char* filename = fname.c_str();
-	FILE *fp;
 
 	//open file and append updated table
+	/*FILE* fp;
 	fp = freopen(filename, "a", stdout);
 	printTable();
 	fclose(fp);
+	freopen("/dev/tty", "a", stdout);*/
+	/*int fd;
+	fd = open(filename, O_CREAT | O_APPEND | O_WRONLY);
+	dup2(fd, 1);
+	printTable();
+	//dup2(1, fd);
+	close(fd);*/
+	std::ofstream file;
+	file.open(filename, std::fstream::app);
+	file << "Destination\tCost\tOutgoing UDP Port\tDestination UDP Port\tTime\n";
+
+	time_t timer;
+	struct tm* timeinfo;
+	
+	for (int i = 0; i < NUM_ROUTERS; i++){
+		int cost = table[i].cost;
+		if (cost != INT_MAX && i != int(MY_ID - 'A')){
+			char dest_id = 'A' + i;
+			int my_port = MY_ID - 'A' + 10000;
+			int next_port = table[i].nextPort;
+			char next_id = next_port - 10000 + 'A';
+
+			time(&timer);
+			timeinfo = localtime(&timer);
+
+			file << dest_id << "\t\t" << cost << "\t" << my_port << "(Node " << MY_ID << ")\t\t" << next_port << " (Node " << next_id << ")\t\t" << asctime(timeinfo) << "\n";
+		}
+	}
+	file.close();
 }
 
 
@@ -236,12 +265,19 @@ void broadcast (int myPort, int remPort){
 	//Throw in data for packet
 		if(DEST_ID == 'Z'){
 			toSend.type = '1';
-			getDV(toSend.tableEntry);
+			toSend.destId = 'Z';
+			toSend.destPort = 10000;
+			toSend.path_travelled[0] = MY_ID;
+			//getDV(toSend.tableEntry);
+			for (int i = 0; i < NUM_ROUTERS; i++){
+				toSend.tableEntry[i] = table[i].cost;
+			}
 		}else{
 			toSend.type = '0';
 			toSend.destId = DEST_ID;
 			toSend.destPort = DEST_ID - 'A' + 10000;
 			toSend.path_travelled[0] = MY_ID;
+			getDV(toSend.tableEntry);
 		}
 	
 
@@ -250,7 +286,7 @@ void broadcast (int myPort, int remPort){
 	//The String will take the format: "%c%c%d5%d %d %d %d %d %d %c%c%c%c%c%c%c%c", type, destId, destPort, tableEntry[0]...[5], path_travelled[0]...[7]
 	strcpy(buf, &toSend.type);
 	strcat(buf, &toSend.destId);
-    sprintf(tempbuf, "%d", toSend.destPort);
+    	sprintf(tempbuf, "%d", toSend.destPort);
 	strcat(buf, tempbuf);
 
 	//all the table entries
@@ -269,6 +305,7 @@ void broadcast (int myPort, int remPort){
 		perror("sendto");
 		exit(1);
 	}
+//	printf("to send: %s", buf);
 
 	close(fd);
 
@@ -312,7 +349,7 @@ void receiveDVAndUpdateTable (int myPort){
 
 	//printf("trying to receive");
 	//keep listening until something actually comes
-//	for (;;) {
+	for (;;) {
 		struct timeval tv;
 		tv.tv_sec = 0;
 		tv.tv_usec = 100000;
@@ -320,11 +357,12 @@ void receiveDVAndUpdateTable (int myPort){
 			return;
 		}
 		recvlen = recvfrom(fd, buf, BUFLEN, 0, (struct sockaddr*) &remaddr, (socklen_t*)&addrlen);
-	//	if (recvlen > 0) break;   
+		if (recvlen > 0) break;   
 		if (recvlen < 1){ close(fd); return;}
-//	}
+	}
 
 	//Now convert the string back into a usable format
+
 	toReceive = string_to_packet(buf, recvlen); 
 	//Notice that toReceive.path_travelled is already updated
 
@@ -347,28 +385,40 @@ void receiveDVAndUpdateTable (int myPort){
 			else
 				pkg_cost = cost_from_pkg + cost_to_pkg;
 
-			if ((current_cost > pkg_cost)
+			if ((pkg_cost - current_cost < 0)
 			    || (current_cost == pkg_cost
 				&& table[i].nextPort > ntohs(remaddr.sin_port))){
 			
 				table[i].cost = pkg_cost;
 				table[i].nextPort = ntohs(remaddr.sin_port);
 
-				printTable ();
-				saveTable ();
+				printTable();
+				saveTable();
 			}
 		}
-		printf("UPDATED");
 		
 	//if received data packet, ....
 	} else {
+		printf("RECEIVED DATA PACKET");
 		int dest_index = toReceive.destId - 'A';
 		//data arrive at destination
 		if(toReceive.destId == MY_ID){
 			printf("Package arrive. Traversed path: %s\n", toReceive.path_travelled);
 		}else{
 		//forward to data to next node
+			if (table[dest_index].nextPort == -1)
+				printf("NOT CONNECTED!");
+	//now define remaddr, the address to whom we want to send messages
+			std::string server = "127.0.0.1";	//localhost
+			memset((char *) &remaddr, 0, sizeof(remaddr));
+			remaddr.sin_family = AF_INET;
 			remaddr.sin_port = htons(table[dest_index].nextPort);
+			const char* server_cc = server.c_str();
+			if (inet_aton(server_cc, &remaddr.sin_addr)==0) {
+				fprintf(stderr, "inet_aton() failed\n");
+				exit(1);
+			}
+			printf("BUFFER: %s", buf);
 			if (sendto(fd, buf, strlen(buf), 0, (struct sockaddr *)&remaddr, sizeof(remaddr))==-1) {
 				perror("sendto");
 				exit(1);
@@ -416,7 +466,7 @@ packet string_to_packet(char* buf, int recvlen)
 	}
 	//k is not reset and is still pointing at beginning of strings.
 	j = 0;
-	for (k; k < recvlen; k++){
+	for (; k < recvlen; k++){
 		if (buf[k] == '\0') break;
 		toGet.path_travelled[j] = buf[k];
 		j++;
@@ -456,19 +506,20 @@ int main(int argc, char const *argv[])
 		exit(0);
 	}
 
+	while(true){
 	broadcast (10006, int(MY_ID - 'A' + 10000));
+	}
 
-	return 0;
   } else {
   	//give DEST_ID an impossible value if only one arg.
   	DEST_ID = 'Z';
   	readInitialFile("initialization_file.txt");
   	printTable();
-	//saveTable();
+	saveTable();
   	while(true){
   		broadcast_all (); 
   		receiveDVAndUpdateTable (int(MY_ID - 'A' + 10000));
-  		usleep(2000);
+  		usleep(20000);
   	}
   	
   }
