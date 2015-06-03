@@ -145,11 +145,16 @@ void readInitialFile(const char* filename){
 //print the content of the ith table.
 //specified in "Instruction 5." of the project specification
 void printTable (){
-	printf("Destination\tCost\tOutgoing UDP Port\tDestination UDP Port\tTime\n");
+	
 
 	time_t timer;
 	struct tm* timeinfo;
+
+	time(&timer);
+	timeinfo = localtime(&timer);
 	
+	printf("%s", asctime(timeinfo));
+	printf("Destination\tCost\tOutgoing UDP Port\tDestination UDP Port\n");
 
 	for (int i = 0; i < NUM_ROUTERS; i++){
 		int cost = table[i].cost;
@@ -158,13 +163,11 @@ void printTable (){
 			int my_port = MY_ID - 'A' + 10000;
 			int next_port = table[i].nextPort;
 			char next_id = next_port - 10000 + 'A';
-
-			time(&timer);
-			timeinfo = localtime(&timer);
-
-			printf("%c\t\t%d\t%d (Node %c)\t\t%d (Node %c)\t\t%s\n", dest_id, cost, my_port, MY_ID, next_port, next_id, asctime(timeinfo));
+			printf("%c\t\t%d\t%d (Node %c)\t\t%d (Node %c)\n", dest_id, cost, my_port, MY_ID, next_port, next_id);
 		}
 	}
+
+	printf("\n\n");
 }
 
 
@@ -191,11 +194,15 @@ void saveTable (){
 	close(fd);*/
 	std::ofstream file;
 	file.open(filename, std::fstream::app);
-	file << "Destination\tCost\tOutgoing UDP Port\tDestination UDP Port\tTime\n";
 
 	time_t timer;
 	struct tm* timeinfo;
-	
+		time(&timer);
+			timeinfo = localtime(&timer);
+
+	file << asctime(timeinfo);
+
+	file << "Destination\tCost\tOutgoing UDP Port\tDestination UDP Port\n";
 	for (int i = 0; i < NUM_ROUTERS; i++){
 		int cost = table[i].cost;
 		if (cost != INT_MAX && i != int(MY_ID - 'A')){
@@ -204,12 +211,12 @@ void saveTable (){
 			int next_port = table[i].nextPort;
 			char next_id = next_port - 10000 + 'A';
 
-			time(&timer);
-			timeinfo = localtime(&timer);
-
-			file << dest_id << "\t\t" << cost << "\t" << my_port << "(Node " << MY_ID << ")\t\t" << next_port << " (Node " << next_id << ")\t\t" << asctime(timeinfo) << "\n";
+		
+			file << dest_id << "\t\t" << cost << "\t" << my_port << "(Node " << MY_ID << ")\t\t" << next_port << " (Node " << next_id << ")\t\t"  << "\n";
 		}
 	}
+
+	file <<"\n\n";
 	file.close();
 }
 
@@ -506,9 +513,12 @@ int main(int argc, char const *argv[])
 		exit(0);
 	}
 
-	while(true){
-	broadcast (10006, int(MY_ID - 'A' + 10000));
+	for(;;){
+		broadcast (10006, int(MY_ID - 'A' + 10000));
+		usleep(20000);
 	}
+	
+	
 
   } else {
   	//give DEST_ID an impossible value if only one arg.
