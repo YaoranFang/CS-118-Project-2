@@ -23,6 +23,7 @@
 #include <string>
 #include <cstdlib>
 #include <arpa/inet.h>
+#include <vector>
 
 
 #define BUFLEN 2048
@@ -61,6 +62,7 @@ struct packet {
 //This is set in the beginning in int main. This is the own ABCDEFGH ID.
 char MY_ID;
 char DEST_ID;
+std::vector<int> NEIGHBORS;
 packet string_to_packet(char* buf, int recvlen);
 /*******************************************************
 			Functions
@@ -129,6 +131,8 @@ void readInitialFile(const char* filename){
 				routing_table.table[dst_router].cost = cost;
 				routing_table.table[dst_router].port = dst_port;
 				routing_table.table[dst_router].nextPort = dst_port;
+
+				NEIGHBORS.push_back(dst_router + 10000);
 			}
 		}
 		file.close();
@@ -145,9 +149,10 @@ void printTable (){
 		if (cost != INT_MAX && i != MY_ID - 'A'){
 			char dest_id = 'A' + i;
 			int my_port = routing_table.port;
-			int dest_port = routing_table.table[i].port;
+			int next_port = routing_table.table[i].nextPort;
+			char next_id = next_port - 10000 + 'A';
 			printf("%c\t\t%d\t%d (Node %c)\t\t%d (Node %c)\n",
-			dest_id, cost, my_port, MY_ID, dest_port, dest_id);
+			dest_id, cost, my_port, MY_ID, next_port, next_id);
 		}
 	}
 	printf("\n\n");
@@ -246,6 +251,13 @@ void broadcast (int myPort, int remPort){
 }
 
 
+void broadcast_all (){
+	for (std::vector<int>::iterator it = NEIGHBORS.begin();
+		it != NEIGHBORS.end(); it++)
+		broadcast(int(MY_ID - 'A' + 10000), *it);
+}
+
+
 //Still needs myPort to open socket
 //i is the ith table
 void receiveDVAndUpdateTable (int myPort){
@@ -283,20 +295,23 @@ void receiveDVAndUpdateTable (int myPort){
 
 	//if received DV, update table
 	if (toReceive.type){
-		//update destination port number
-		//int dest_index = toReceive.destId - 'A'; //this should be set when the package is a data
-		int package_source_index = ntohs(remaddr.sin_port) - 10000;
-		//routing_table.table[dest_index].port = toReceive.destPort; //this should be set when the package is a data
+		//get package source router
+		int pkg_src_i = ntohs(remaddr.sin_port) - 10000;
 
 		//update costs
 		for(int i = 0; i < NUM_ROUTERS; i++){
 
-			if((routing_table.table[i].cost>toReceive.tableEntry[i]+routing_table.table[package_source_index].cost)
-				|| (routing_table.table[i].cost == toReceive.tableEntry[i]+routing_table.table[package_source_index].cost
+			int current_cost = routing_table.table[i].cost;
+			int cost_from_pkg = toReceive.tableEntry[i];
+			int cost_to_pkg = routing_table.table[pkg_src_i].cost;
+			int pkg_cost = cost_from_pkg + cost_to_pkg;
+
+			if ((current_cost > pkg_cost)
+			    || (current_cost == pkg_cost
 				&& routing_table.table[i].nextPort > ntohs(remaddr.sin_port))){
 
-				routing_table.table[i].cost = toReceive.tableEntry[i]+routing_table.table[package_source_index].cost;
-				routing_table.table[i].port = i + 10000;
+				routing_table.table[i].cost = pkg_cost;
+				//routing_table.table[i].port = i + 10000;
 				routing_table.table[i].nextPort = ntohs(remaddr.sin_port);
 
 				saveTable ();
@@ -307,9 +322,11 @@ void receiveDVAndUpdateTable (int myPort){
 	//if received data packet, ....
 	} else {
 		int dest_index = toReceive.destId - 'A';
-		if(toReceive.destId == MY_ID){//data arrive at destination
+		//data arrive at destination
+		if(toReceive.destId == MY_ID){
 			printf("Package arrive. Traversed path: %s\n", toReceive.path_travelled);
-		}else{//forward to data to next node
+		}else{
+		//forward to data to next node
 			remaddr.sin_port = htons(routing_table.table[dest_index].nextPort);
 			if (sendto(fd, buf, strlen(buf), 0, (struct sockaddr *)&remaddr, sizeof(remaddr))==-1) {
 				perror("sendto");
