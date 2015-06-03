@@ -227,6 +227,18 @@ void broadcast (int myPort, int remPort){
 	//TODO
 	/*begin sending message*/
 	//Throw in data for packet
+		if(MY_ID>='A'&&MY_ID<='F'){
+			toSend.type = '1';
+			for(int i; i<NUM_ROUTERS; i++){
+				toSend.tableEntry[i] = routing_table.table[i].cost;
+			}
+		}else{
+			toSend.type = '0';
+			toSend.destId = DEST_ID;
+			toSend.destPort = DEST_ID - 'A' + 10000;
+			toSend.path_travelled[0] = MY_ID;
+		}
+	
 
 
 	//Change struct packet format into string (bytes)
