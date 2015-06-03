@@ -39,10 +39,7 @@ struct RoutingTableEntry {
 	int nextPort; //Should know where should I forward the packet to
 };
 
-struct RoutingTable {
-	int port;
-	RoutingTableEntry table[NUM_ROUTERS];
-} routing_table;
+RoutingTableEntry table[NUM_ROUTERS];
 
 /* index 0-A
  * index 1-B
@@ -77,16 +74,15 @@ packet string_to_packet(char* buf);
 //initialize routing tables
 void initializeTable(){
 	int index = MY_ID - 'A';
-	routing_table.port = 10000 + index;
 	for (int i = 0; i < NUM_ROUTERS; i++){
 		if (index == i){
-			routing_table.table[i].cost = 0;
-			routing_table.table[i].nextPort = routing_table.port;
+			table[i].cost = 0;
+			table[i].nextPort = index + 10000;
 		}
 
 		else{
-			routing_table.table[i].cost = INT_MAX;
-			routing_table.table[i].nextPort = -1;
+			table[i].cost = INT_MAX;
+			table[i].nextPort = -1;
 		}
 	}
 }
@@ -105,23 +101,27 @@ void readInitialFile(const char* filename){
 		while(getline(file, line)){
 			//tokenize string with ',' delimiter
 			char* line_ptr = &line[0];
-			char* source_router = strtok_s(line_ptr, ",", (char**)&tempbuf);
+			char* source_router = strtok(line_ptr, ",");
+			//char* source_router = strtok_s(line_ptr, ",", (char**)&tempbuf);
 			if (source_router == NULL){
 				file.close();
 				return;
 			}
 			if (source_router[0] == MY_ID){
-				char* dest_router = strtok_s(NULL, ",", (char**)&tempbuf);
+				char* dest_router = strtok(NULL, ",");
+				//char* dest_router = strtok_s(NULL, ",", (char**)&tempbuf);
 				if (dest_router == NULL){
 					file.close();
 					return;
 				}
-				char* source_port = strtok_s(NULL, ",", (char**)&tempbuf);
+				char* source_port = strtok(NULL, ",");
+				//char* source_port = strtok_s(NULL, ",", (char**)&tempbuf);
 				if (source_port == NULL){
 					file.close();
 					return;
 				}
-				char* link_cost = strtok_s(NULL, ",", (char**)&tempbuf);
+				char* link_cost = strtok(NULL, ",");
+				//char* link_cost = strtok_s(NULL, ",", (char**)&tempbuf);
 				if (link_cost == NULL){
 					file.close();
 					return;
@@ -132,9 +132,9 @@ void readInitialFile(const char* filename){
 				int cost = atoi(link_cost);
 
 				//update routing_tables
-				routing_table.table[dst_router].cost = cost;
-				routing_table.table[dst_router].port = dst_port;
-				routing_table.table[dst_router].nextPort = dst_port;
+				table[dst_router].cost = cost;
+				table[dst_router].port = dst_port;
+				table[dst_router].nextPort = dst_port;
 
 				NEIGHBORS.push_back(dst_router + 10000);
 			}
@@ -149,11 +149,11 @@ void readInitialFile(const char* filename){
 void printTable (){
 	printf("Destination\tCost\tOutgoing UDP Port\tDestination UDP Port\n");
 	for (int i = 0; i < NUM_ROUTERS; i++){
-		int cost = routing_table.table[i].cost;
+		int cost = table[i].cost;
 		if (cost != INT_MAX && i != MY_ID - 'A'){
 			char dest_id = 'A' + i;
-			int my_port = routing_table.port;
-			int next_port = routing_table.table[i].nextPort;
+			int my_port = MY_ID - 'A' + 10000;
+			int next_port = table[i].nextPort;
 			char next_id = next_port - 10000 + 'A';
 			printf("%c\t\t%d\t%d (Node %c)\t\t%d (Node %c)\n",
 			dest_id, cost, my_port, MY_ID, next_port, next_id);
@@ -183,7 +183,7 @@ void saveTable (){
 //make sure to pass in an array of size NUM_ROUTERS
 void getDV (int* DV){
 	for (int i = 0; i < NUM_ROUTERS; i++){
-		DV[i] = routing_table.table[i].cost;
+		DV[i] = table[i].cost;
 	}
 }
 
@@ -229,9 +229,7 @@ void broadcast (int myPort, int remPort){
 	//Throw in data for packet
 		if(MY_ID>='A'&&MY_ID<='F'){
 			toSend.type = '1';
-			for(int i; i<NUM_ROUTERS; i++){
-				toSend.tableEntry[i] = routing_table.table[i].cost;
-			}
+			getDV(toSend.tableEntry);
 		}else{
 			toSend.type = '0';
 			toSend.destId = DEST_ID;
@@ -270,7 +268,7 @@ void broadcast (int myPort, int remPort){
 void broadcast_all (){
 	for (std::vector<int>::iterator it = NEIGHBORS.begin();
 		it != NEIGHBORS.end(); it++)
-		broadcast(int(MY_ID - 'A' + 10000), *it);
+			broadcast(int(MY_ID - 'A' + 10000), *it);
 }
 
 
@@ -301,7 +299,7 @@ void receiveDVAndUpdateTable (int myPort){
 
 	//keep listening until something actually comes
 	for (;;) {
-		recvlen = recvfrom(fd, buf, BUFLEN, 0, (struct sockaddr*) &remaddr, (int*)&addrlen);
+		recvlen = recvfrom(fd, buf, BUFLEN, 0, (struct sockaddr*) &remaddr, (socklen_t*)&addrlen);
 		if (recvlen > 0) break;   
 	}
 
@@ -317,18 +315,18 @@ void receiveDVAndUpdateTable (int myPort){
 		//update costs
 		for(int i = 0; i < NUM_ROUTERS; i++){
 
-			int current_cost = routing_table.table[i].cost;
+			int current_cost = table[i].cost;
 			int cost_from_pkg = toReceive.tableEntry[i];
-			int cost_to_pkg = routing_table.table[package_source_index].cost;
+			int cost_to_pkg = table[package_source_index].cost;
 			int pkg_cost = cost_from_pkg + cost_to_pkg;
 
 			if ((current_cost > pkg_cost)
 			    || (current_cost == pkg_cost
-				&& routing_table.table[i].nextPort > ntohs(remaddr.sin_port))){
+				&& table[i].nextPort > ntohs(remaddr.sin_port))){
 			
-				routing_table.table[i].cost = toReceive.tableEntry[i]+routing_table.table[package_source_index].cost;
-				routing_table.table[i].port = i + 10000;
-				routing_table.table[i].nextPort = ntohs(remaddr.sin_port);
+				table[i].cost = toReceive.tableEntry[i]+table[package_source_index].cost;
+				table[i].port = i + 10000;
+				table[i].nextPort = ntohs(remaddr.sin_port);
 
 				saveTable ();
 				printTable ();
@@ -343,7 +341,7 @@ void receiveDVAndUpdateTable (int myPort){
 			printf("Package arrive. Traversed path: %s\n", toReceive.path_travelled);
 		}else{
 		//forward to data to next node
-			remaddr.sin_port = htons(routing_table.table[dest_index].nextPort);
+			remaddr.sin_port = htons(table[dest_index].nextPort);
 			if (sendto(fd, buf, strlen(buf), 0, (struct sockaddr *)&remaddr, sizeof(remaddr))==-1) {
 				perror("sendto");
 				exit(1);
