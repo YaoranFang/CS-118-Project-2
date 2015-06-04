@@ -379,7 +379,6 @@ void receiveDVAndUpdateTable (int myPort){
 		if (recvlen > 0) break;   
 		if (recvlen < 1){ close(fd); return;}
 	}
-	printf("received");
 
 	for (int i = 0; i < NEIGHBORS.size(); i++){
 		if (NEIGHBORS[i].m_port == ntohs(remaddr.sin_port))
@@ -398,7 +397,7 @@ void receiveDVAndUpdateTable (int myPort){
 
 	//if sending port is not already a neighbor, but it's in the initial file
 	//add it to our neighbor list
-	bool contains = false;
+	/*bool contains = false;
 	for (int i = 0; i < NEIGHBORS.size(); i++){
 		if (NEIGHBORS[i].m_port == package_source_index)
 			contains = true;
@@ -436,7 +435,7 @@ void receiveDVAndUpdateTable (int myPort){
 		}
 		file.close();
 	}
-
+*/
 	//if received DV, update table
 
 	if (toReceive.type == '1'){
@@ -638,7 +637,7 @@ int main(int argc, char const *argv[])
 			time(&time1); 
 			for (int i = 0; i < NEIGHBORS.size(); i++){
 				NEIGHBORS[i].m_timer++;
-				if (NEIGHBORS[i].m_timer >= 5){  //NEIGHBORS[i] is DEAD
+				if (NEIGHBORS[i].m_timer >= 10){  //NEIGHBORS[i] is DEAD
 					table[NEIGHBORS[i].m_port - 10000].cost = INT_MAX;
 					for (int j = 0; j < 6; j++){
 						if (table[j].nextPort == NEIGHBORS[i].m_port){
@@ -652,18 +651,7 @@ int main(int argc, char const *argv[])
 				}
 			}
 		}
-		for (int i = 0; i < NEIGHBORS.size(); i++){
-			if (NEIGHBORS[i].direct_cost < table[NEIGHBORS[i].m_port - 10000].cost
-				|| (NEIGHBORS[i].direct_cost == table[NEIGHBORS[i].m_port - 10000].cost
-					&& NEIGHBORS[i].m_port < table[NEIGHBORS[i].m_port - 10000].nextPort)){
-				table[NEIGHBORS[i].m_port - 10000].cost = NEIGHBORS[i].direct_cost;
-				table[NEIGHBORS[i].m_port - 10000].nextPort = NEIGHBORS[i].m_port;
-				printTable();
-				saveTable();
-			} else if (NEIGHBORS[i].direct_cost == table[NEIGHBORS[i].m_port - 10000].cost) {
-			
-			}
-		}
+
   		usleep(20000);
   	}
   }
