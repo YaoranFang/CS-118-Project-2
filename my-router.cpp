@@ -10,11 +10,12 @@
 
 #include <sys/types.h>
 
-#include <sys/socket.h>  //Unix Version
+//#include <sys/socket.h>  //Unix Version
 //#include <WinSock2.h>  //Windows version
 //#pragma comment(lib, "ws2_32.lib")
 
 #include <netinet/in.h>
+#include <arpa/inet.h>
 #include <ctime>
 #include <time.h>
 #include <fstream>
@@ -24,7 +25,7 @@
 #include <limits.h>
 #include <string>
 #include <cstdlib>
-#include <arpa/inet.h>
+
 #include <vector>
 
 
@@ -59,10 +60,18 @@ struct packet {
 					//useful to determine when to stop, etc.
 } toSend, toReceive;
 
+struct alivestruct {
+	int m_port;
+	int m_timer;
+};
+
 //This is set in the beginning in int main. This is the own ABCDEFGH ID.
 char MY_ID;
 char DEST_ID;
-std::vector<int> NEIGHBORS;
+std::vector<struct alivestruct> NEIGHBORS;
+
+
+
 packet string_to_packet(char* buf, int recvlen);
 /*******************************************************
 			Functions
@@ -136,7 +145,11 @@ void readInitialFile(const char* filename){
 				table[dst_router].cost = cost;
 				table[dst_router].nextPort = dst_port;
 
-				NEIGHBORS.push_back(dst_router + 10000);
+				struct alivestruct haha;
+				haha.m_port = dst_router + 10000;
+				haha.m_timer = 0;
+
+				NEIGHBORS.push_back(haha);
 			}
 		}
 		file.close();
@@ -322,9 +335,10 @@ void broadcast (int myPort, int remPort){
 
 
 void broadcast_all (){
-	for (std::vector<int>::iterator it = NEIGHBORS.begin();
+	for (std::vector<alivestruct>::iterator it = NEIGHBORS.begin();
 		it != NEIGHBORS.end(); it++){
-			broadcast(int(MY_ID - 'A' + 10000), *it);
+		
+			broadcast(int(MY_ID - 'A' + 10000), it->m_port);
 	}
 }
 
@@ -368,6 +382,14 @@ void receiveDVAndUpdateTable (int myPort){
 		recvlen = recvfrom(fd, buf, BUFLEN, 0, (struct sockaddr*) &remaddr, (socklen_t*)&addrlen);
 		if (recvlen > 0) break;   
 		if (recvlen < 1){ close(fd); return;}
+	}
+
+	for (int i = 0; i < NEIGHBORS.size(); i++){
+		if (NEIGHBORS[i].m_port == ntohs(remaddr.sin_port))
+		{
+			NEIGHBORS[i].m_timer = 0;
+			break;
+		}
 	}
 
 	//Now convert the string back into a usable format
@@ -555,15 +577,37 @@ int main(int argc, char const *argv[])
 	
 
   } else {
+
+	  clock_t t1, t2;
+	  float diff = 0;
+	  t1 = clock();
+
+
   	//give DEST_ID an impossible value if only one arg.
   	DEST_ID = 'Z';
   	readInitialFile("initialization_file.txt");
   	printTable();
 	saveTable();
   	while(true){
+		t2 = clock();
   		broadcast_all (); 
   		receiveDVAndUpdateTable (int(MY_ID - 'A' + 10000));
   		usleep(20000);
+
+
+		diff = (((float)t2 - (float)t1) / 1000000.0F) * 1000;
+		if (diff > 1000){  //1 second
+			t1 = t2;
+			for (int i = 0; i < NEIGHBORS.size(); i++){
+				NEIGHBORS[i].m_timer++;
+				if (NEIGHBORS[i].m_timer >= 5){  //NEIGHBORS[i] is DEAD
+					table[NEIGHBORS[i].m_port - 10000].cost = INT_MAX;
+					
+				}
+			}
+		}
+
+		
   	}
   	
   }
