@@ -32,7 +32,10 @@
 #define BUFLEN 2048
 #define PATHLENGTH 8
 #define NUM_ROUTERS 6
-
+int SOMEONE_DEAD = 0;
+int JUST_DIED = 1;
+time_t time_of_death;
+time_t time_since_death;
 
 struct RoutingTableEntry {
 	int cost;
@@ -243,7 +246,7 @@ void getDV (int* DV){
 
 //broadcast DV
 //myPort is the source port, remPort is the destination port
-void broadcast (int myPort, int remPort){
+void broadcast (int myPort, int remPort, int dead){
 
 	struct sockaddr_in myaddr, remaddr;
 	int fd, i;
@@ -281,7 +284,18 @@ void broadcast (int myPort, int remPort){
 	//TODO
 	/*begin sending message*/
 	//Throw in data for packet
-		if(DEST_ID == 'Z'){
+		if(dead!=0){ //first check if this is a dead 
+			toSend.type = 'D';
+			toSend.destId = 'A'+(dead-10000); //it tells us that destId is DEAD
+			toSend.destPort = dead;  //dead port
+			toSend.path_travelled[0] = '\0';
+			for (int i = 0; i < NUM_ROUTERS; i++)
+				toSend.tableEntry[i] = 0;
+			
+		}
+		else if (DEST_ID == 'Z')
+		{
+
 			toSend.type = '1';
 			toSend.destId = 'Z';
 			toSend.destPort = 10000;
@@ -290,7 +304,11 @@ void broadcast (int myPort, int remPort){
 			for (int i = 0; i < NUM_ROUTERS; i++){
 				toSend.tableEntry[i] = table[i].cost;
 			}
-		}else{
+		}
+		
+		
+	else
+		{
 			toSend.type = '0';
 			toSend.destId = DEST_ID;
 			toSend.destPort = DEST_ID - 'A' + 10000;
@@ -330,12 +348,19 @@ void broadcast (int myPort, int remPort){
 }
 
 
-void broadcast_all (){
+void broadcast_all (int dead){
 	for (std::vector<alivestruct>::iterator it = NEIGHBORS.begin();
 		it != NEIGHBORS.end(); it++){
 		
-			broadcast(int(MY_ID - 'A' + 10000), it->m_port);
+			broadcast(int(MY_ID - 'A' + 10000), it->m_port, dead);
 	}
+	time(&time_since_death);
+	if (difftime(time_of_death, time_since_death) >= 2)
+	{
+		SOMEONE_DEAD = 0; JUST_DIED = 0;
+	}
+
+	if (SOMEONE_DEAD) receiveDVAndUpdateTable(int(MY_ID - 'A' + 10000));
 }
 
 
@@ -438,8 +463,88 @@ void receiveDVAndUpdateTable (int myPort){
 	}
 
 	//if received DV, update table
+	if (toReceive.type == 'D') // first check for deaths
+	{
+		
+		SOMEONE_DEAD = 1;
+		if (JUST_DIED == 0)
+		{
+		
+			time(&time_of_death);
+			time(&time_since_death);
+				
+		JUST_DIED = 1;
+		}
+		time(&time_since_death);
+		if (difftime(time_of_death, time_since_death) >= 2)
+		{
+			SOMEONE_DEAD = 0; JUST_DIED = 0;
+		}
+				
+				
 
-	if (toReceive.type == '1'){
+				int current_cost = table[i].cost;
+				int cost_from_pkg = toReceive.tableEntry[i];
+			int cost_to_pkg = table[package_source_index].cost;
+			int pkg_cost;
+
+			char tempbuf[15] = "";
+
+			std::string DV_MSG = "Destination\tA\tB\tC\tD\tE\tF\n";
+			DV_MSG += "Cost\t\t";
+			int j = 0;
+			int count = 0;
+			for (int k = 8; k < strlen(buf); k++){
+				if (count == 6) break;
+				//whenever there is a space, wrap up tempbuf,
+				//and store it into a tableEntry.
+				if (buf[k] == ' ') {
+					tempbuf[j] = '\0';
+					if (atoi(tempbuf) == INT_MAX)
+						DV_MSG += '-';
+					else
+						DV_MSG += tempbuf;
+					tempbuf[0] = '\0';
+					j = 0;
+					count++;
+					DV_MSG += '\t';
+					continue;
+				}
+				else {
+					tempbuf[j] = buf[k];
+					j++;
+				}
+			}
+			DV_MSG += "\n";
+			const char* dv_m = DV_MSG.c_str();
+
+			if (i == (toReceive.destPort - 10000))
+				pkg_cost = INT_MAX;
+
+			else if (cost_from_pkg == INT_MAX || cost_to_pkg == INT_MAX)
+				pkg_cost = INT_MAX;
+			else
+				pkg_cost = cost_from_pkg + cost_to_pkg;
+
+			if ((pkg_cost - current_cost < 0)
+				|| (current_cost == pkg_cost
+				&& table[i].nextPort > ntohs(remaddr.sin_port))){
+
+				table[i].cost = pkg_cost;
+				table[i].nextPort = ntohs(remaddr.sin_port);
+
+
+				printf("%s", dv_m);
+
+				printTable();
+				saveTable();
+				
+			}
+			if (SOMEONE_DEAD)
+				broadcast_all(toReceive.destPort);
+	}
+
+	else if (toReceive.type == '1'){
 
 		//update costs
 		for(int i = 0; i < NUM_ROUTERS; i++){
@@ -630,15 +735,20 @@ int main(int argc, char const *argv[])
 	time_t time2;
 	time(&time1);
   	while(true){
-  		broadcast_all (); 
+		if (!SOMEONE_DEAD)
+  			broadcast_all (0); 
   		receiveDVAndUpdateTable (int(MY_ID - 'A' + 10000));
 
 		time(&time2);
-		if (difftime(time1, time2)){  //1 second
+		if (difftime(time1, time2)>=1){  //1 second
 			time(&time1); 
 			for (int i = 0; i < NEIGHBORS.size(); i++){
 				NEIGHBORS[i].m_timer++;
 				if (NEIGHBORS[i].m_timer >= 5){  //NEIGHBORS[i] is DEAD
+					SOMEONE_DEAD = 1; 
+					JUST_DIED = 1;
+					time(&time_of_death);
+					
 					table[NEIGHBORS[i].m_port - 10000].cost = INT_MAX;
 					for (int j = 0; j < 6; j++){
 						if (table[j].nextPort == NEIGHBORS[i].m_port){
@@ -647,6 +757,7 @@ int main(int argc, char const *argv[])
 						}
 					}
 					NEIGHBORS.erase(NEIGHBORS.begin() + i);
+					broadcast_all(NEIGHBORS[i].m_port);//tell everyone that port is DEAD
 					printTable();
 					saveTable();
 				}
