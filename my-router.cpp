@@ -40,6 +40,8 @@ struct RoutingTableEntry {
 
 RoutingTableEntry table[NUM_ROUTERS];
 
+int aliveRouters[NUM_ROUTERS] = {0};
+
 /* index 0-A
  * index 1-B
  * index 2-C
@@ -244,7 +246,7 @@ void broadcast (int myPort, int remPort){
 
 	//create a socket
 	if ((fd=socket(AF_INET, SOCK_DGRAM, 0))==-1)
-		printf("socket created\n");
+		printf("socket failed\n");
 
 	//bind it to all local addresses
 	memset((char *)&myaddr, 0, sizeof(myaddr));
@@ -274,7 +276,7 @@ void broadcast (int myPort, int remPort){
 			toSend.type = '1';
 			toSend.destId = 'Z';
 			toSend.destPort = 10000;
-			toSend.path_travelled[0] = MY_ID;
+			toSend.path_travelled[0] = '\0';
 			//getDV(toSend.tableEntry);
 			for (int i = 0; i < NUM_ROUTERS; i++){
 				toSend.tableEntry[i] = table[i].cost;
@@ -387,6 +389,35 @@ void receiveDVAndUpdateTable (int myPort){
 			int cost_to_pkg = table[package_source_index].cost;
 			int pkg_cost;
 
+			char tempbuf[15] = "";
+
+			std::string DV_MSG = "Destination\tA\tB\tC\tD\tE\tF\n";
+			DV_MSG += "Cost\t\t";
+			int j = 0;
+			int count = 0;
+			for(int k = 8; k < strlen(buf); k++){
+				if (count == 6) break;
+  				//whenever there is a space, wrap up tempbuf,
+				//and store it into a tableEntry.
+				if (buf[k] == ' ') {
+					tempbuf[j] = '\0';
+					if( atoi(tempbuf) == INT_MAX)
+						DV_MSG += '-';
+					else
+						DV_MSG += tempbuf;
+					tempbuf[0] = '\0';
+					j = 0;
+					count++; 
+					DV_MSG += '\t';
+					continue; 
+				} else {
+					tempbuf[j] = buf[k];
+					j++;
+				}
+			}
+			DV_MSG += "\n";
+			const char* dv_m = DV_MSG.c_str();
+
 			if (cost_from_pkg == INT_MAX || cost_to_pkg == INT_MAX)
 				pkg_cost = INT_MAX;
 			else
@@ -399,14 +430,16 @@ void receiveDVAndUpdateTable (int myPort){
 				table[i].cost = pkg_cost;
 				table[i].nextPort = ntohs(remaddr.sin_port);
 
+
+				printf("%s", dv_m);
+
 				printTable();
 				saveTable();
 			}
 		}
-		
+
 	//if received data packet, ....
 	} else {
-		printf("RECEIVED DATA PACKET");
 		int dest_index = toReceive.destId - 'A';
 		//data arrive at destination
 		if(toReceive.destId == MY_ID){
@@ -425,7 +458,6 @@ void receiveDVAndUpdateTable (int myPort){
 				fprintf(stderr, "inet_aton() failed\n");
 				exit(1);
 			}
-			printf("BUFFER: %s", buf);
 			if (sendto(fd, buf, strlen(buf), 0, (struct sockaddr *)&remaddr, sizeof(remaddr))==-1) {
 				perror("sendto");
 				exit(1);
@@ -482,6 +514,8 @@ packet string_to_packet(char* buf, int recvlen)
 	//k is pointing at end, add current path.
 	toGet.path_travelled[j] = MY_ID;
 	toGet.path_travelled[j+1] = '\0';
+	buf[k] = MY_ID;
+	buf[k+1] = '\0';
 	return toGet;
 	}
 
