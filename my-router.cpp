@@ -63,6 +63,7 @@ struct packet {
 struct alivestruct {
 	int m_port;
 	int m_timer;
+	int direct_cost;
 };
 
 //This is set in the beginning in int main. This is the own ABCDEFGH ID.
@@ -101,8 +102,6 @@ void initializeTable(){
 //read the initial file and update the routing table accordingly
 //specified in "Approach 8."
 void readInitialFile(const char* filename){
-	int i = 1;
-	char tempbuf[15];
 	initializeTable();
 	std::string line;
 	std::ifstream file(filename);
@@ -112,26 +111,22 @@ void readInitialFile(const char* filename){
 			//tokenize string with ',' delimiter
 			char* line_ptr = &line[0];
 			char* source_router = strtok(line_ptr, ",");
-			//char* source_router = strtok_s(line_ptr, ",", (char**)&tempbuf);
 			if (source_router == NULL){
 				file.close();
 				return;
 			}
 			if (source_router[0] == MY_ID){
 				char* dest_router = strtok(NULL, ",");
-				//char* dest_router = strtok_s(NULL, ",", (char**)&tempbuf);
 				if (dest_router == NULL){
 					file.close();
 					return;
 				}
 				char* source_port = strtok(NULL, ",");
-				//char* source_port = strtok_s(NULL, ",", (char**)&tempbuf);
 				if (source_port == NULL){
 					file.close();
 					return;
 				}
 				char* link_cost = strtok(NULL, ",");
-				//char* link_cost = strtok_s(NULL, ",", (char**)&tempbuf);
 				if (link_cost == NULL){
 					file.close();
 					return;
@@ -148,6 +143,7 @@ void readInitialFile(const char* filename){
 				struct alivestruct haha;
 				haha.m_port = dst_router + 10000;
 				haha.m_timer = 0;
+				haha.direct_cost = cost;
 
 				NEIGHBORS.push_back(haha);
 			}
@@ -383,6 +379,7 @@ void receiveDVAndUpdateTable (int myPort){
 		if (recvlen > 0) break;   
 		if (recvlen < 1){ close(fd); return;}
 	}
+	printf("received");
 
 	for (int i = 0; i < NEIGHBORS.size(); i++){
 		if (NEIGHBORS[i].m_port == ntohs(remaddr.sin_port))
@@ -395,13 +392,54 @@ void receiveDVAndUpdateTable (int myPort){
 	//Now convert the string back into a usable format
 
 	toReceive = string_to_packet(buf, recvlen); 
+	//get package source router
+	int package_source_index = ntohs(remaddr.sin_port) - 10000;
 	//Notice that toReceive.path_travelled is already updated
+
+	//if sending port is not already a neighbor, but it's in the initial file
+	//add it to our neighbor list
+	bool contains = false;
+	for (int i = 0; i < NEIGHBORS.size(); i++){
+		if (NEIGHBORS[i].m_port == package_source_index)
+			contains = true;
+	}
+	if (!contains){
+		std::string line;
+		std::ifstream file("initialization-file.txt");
+		if (file.is_open()){
+			while(getline(file, line)){
+			//tokenize string with ',' delimiter
+				char* line_ptr = &line[0];
+				char* source_router = strtok(line_ptr, ",");
+				if (source_router != NULL && source_router[0] == MY_ID){
+					char* dest_router = strtok(NULL, ",");
+					char* source_port = strtok(NULL, ",");
+					char* link_cost = strtok(NULL, ",");
+					if (source_port != NULL
+						&& atoi(source_port) == package_source_index + 10000
+						&& link_cost != NULL) {
+
+						int cost = atoi(link_cost);
+
+						struct alivestruct haha;
+						haha.m_port = package_source_index;
+						haha.m_timer = 0;
+						haha.direct_cost = cost;
+						NEIGHBORS.push_back(haha);
+
+						file.close();
+						break;
+					}
+					
+				}
+			}
+		}
+		file.close();
+	}
 
 	//if received DV, update table
 
 	if (toReceive.type == '1'){
-		//get package source router
-		int package_source_index = ntohs(remaddr.sin_port) - 10000;
 
 		//update costs
 		for(int i = 0; i < NUM_ROUTERS; i++){
@@ -588,29 +626,46 @@ int main(int argc, char const *argv[])
   	readInitialFile("initialization_file.txt");
   	printTable();
 	saveTable();
+	time_t time1;
+	time_t time2;
+	time(&time1);
   	while(true){
-		t2 = clock();
   		broadcast_all (); 
   		receiveDVAndUpdateTable (int(MY_ID - 'A' + 10000));
-  		usleep(20000);
 
-
-		diff = (((float)t2 - (float)t1) / 1000000.0F) * 1000;
-		if (diff > 1000){  //1 second
-			t1 = t2;
+		time(&time2);
+		if (difftime(time1, time2)){  //1 second
+			time(&time1); 
 			for (int i = 0; i < NEIGHBORS.size(); i++){
 				NEIGHBORS[i].m_timer++;
 				if (NEIGHBORS[i].m_timer >= 5){  //NEIGHBORS[i] is DEAD
 					table[NEIGHBORS[i].m_port - 10000].cost = INT_MAX;
-					
+					for (int j = 0; j < 6; j++){
+						if (table[j].nextPort == NEIGHBORS[i].m_port){
+							table[j].nextPort = -1;
+							table[j].cost = INT_MAX;
+						}
+					}
+					NEIGHBORS.erase(NEIGHBORS.begin() + i);
+					printTable();
+					saveTable();
 				}
 			}
 		}
-
-		
+		for (int i = 0; i < NEIGHBORS.size(); i++){
+			if (NEIGHBORS[i].direct_cost < table[NEIGHBORS[i].m_port - 10000].cost
+				|| (NEIGHBORS[i].direct_cost == table[NEIGHBORS[i].m_port - 10000].cost
+					&& NEIGHBORS[i].m_port < table[NEIGHBORS[i].m_port - 10000].nextPort)){
+				table[NEIGHBORS[i].m_port - 10000].cost = NEIGHBORS[i].direct_cost;
+				table[NEIGHBORS[i].m_port - 10000].nextPort = NEIGHBORS[i].m_port;
+				printTable();
+				saveTable();
+			} else if (NEIGHBORS[i].direct_cost == table[NEIGHBORS[i].m_port - 10000].cost) {
+			
+			}
+		}
+  		usleep(20000);
   	}
-  	
   }
-
   return 0;
 }
